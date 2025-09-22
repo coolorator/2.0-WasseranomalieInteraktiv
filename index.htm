@@ -3,160 +3,169 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dichteanomalie des Wassers</title>
+    <title>Anomalie App 3.0</title>
     <style>
-        /* Grundlegendes Styling für eine saubere, mobile-first Darstellung */
         body {
-            font-family: Arial, sans-serif;
-            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f0f2f5;
+            color: #333;
             padding: 20px;
-            background-color: #f0f0f0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-        .container {
+            text-align: center;
             max-width: 800px;
-            width: 100%;
-            background-color: #fff;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-        }
-        h1 {
-            color: #004d99;
-            text-align: center;
-        }
-        p {
+            margin: auto;
             line-height: 1.6;
-            margin-bottom: 20px;
-            text-align: center;
         }
+
         #zoom-info {
             font-weight: bold;
-            text-align: center;
+            color: #007bff;
+            padding: 10px;
+            border-radius: 8px;
             margin-bottom: 10px;
-            color: #333;
         }
+
+        h1 {
+            color: #17183B;
+            font-size: 1.5em;
+        }
+
+        p {
+            margin-bottom: 20px;
+        }
+
         #chart-container {
-            position: relative;
-            height: 400px; /* Feste Höhe für Desktop */
-            width: 100%;
+            background: #fff;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
         }
-        /* Responsives Design für mobile Geräte */
-        @media (max-width: 600px) {
-            #chart-container {
-                height: 300px; /* Kleinere Höhe auf Mobilgeräten */
-            }
-        }
-        /* Wichtig: touch-action: none; verhindert, dass der Browser zoomen kann */
+
         canvas {
-            touch-action: none;
+            touch-action: none; /* Crucial for mobile zoom */
         }
-        .button-container {
-            text-align: center;
+
+        #reset-button {
             margin-top: 20px;
-        }
-        .reset-button {
-            background-color: #007bff;
+            padding: 10px 20px;
+            font-size: 1em;
+            cursor: pointer;
+            background-color: #dc3545;
             color: white;
             border: none;
-            padding: 10px 20px;
-            border-radius: 5px;
-            cursor: pointer;
+            border-radius: 8px;
             transition: background-color 0.3s ease;
         }
-        .reset-button:hover {
-            background-color: #0056b3;
+
+        #reset-button:hover {
+            background-color: #c82333;
+        }
+
+        @media (max-width: 600px) {
+            body {
+                padding: 10px;
+            }
+
+            h1 {
+                font-size: 1.2em;
+            }
+
+            #chart-container {
+                padding: 10px;
+            }
         }
     </style>
 </head>
 <body>
 
-    <div class="container">
-        <div id="zoom-info">Zoom-Level: Normal</div>
-        <h1>Die Dichteanomalie des Wassers</h1>
-        <p>
-            Wasser ist ein Stoff mit Superkräften. Eine davon ist die Dichteanomalie: Es dehnt sich beim Gefrieren stark aus und hat sein kleinstes Volumen bei +4°C. Erforsche dieses einzigartige Verhalten selbst.
-        </p>
-        <div id="chart-container">
-            <canvas id="anomalyChart"></canvas>
-        </div>
-        <div class="button-container">
-            <button id="reset-zoom-btn" class="reset-button">Zoom zurücksetzen</button>
-        </div>
+    <div id="zoom-info">Zoom-Level: Normal</div>
+
+    <h1>Wasser: Ein Stoff mit Superkräften</h1>
+    <p>
+        Eine davon ist die **Dichteanomalie**: Es dehnt sich beim Gefrieren stark aus und hat sein kleinstes Volumen bei +4°C. Erforsche dieses einzigartige Verhalten selbst.
+    </p>
+
+    <div id="chart-container">
+        <canvas id="anomalyChart"></canvas>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <button id="reset-button">Zoom zurücksetzen</button>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+
     <script>
-        // Der gesamte JavaScript-Code für die Logik
-        
-        // Konstanten und DOM-Elemente
-        const chartCanvas = document.getElementById('anomalyChart');
-        const zoomInfo = document.getElementById('zoom-info');
-        const resetButton = document.getElementById('reset-zoom-btn');
-        const startVolume = 1.0; // 1 Liter bei 4°C
-        
-        // Initialer Y-Bereich für die Zoom-Berechnung
-        let initialYRange;
-        
-        // Physikalisch korrekte Dichten für die Berechnung des relativen Volumens
-        const densityWaterAt4C = 0.999975; // Dichte von Wasser bei 4°C in g/cm³
-        const densityIceAt0C = 0.9167; // Dichte von Eis bei 0°C in g/cm³
+        // 1. DATA PREPARATION (SCIENTIFICALLY ACCURATE)
+        // Set reference volume at 4°C to 1 liter.
+        const refTemp = 4; // °C
+        const tempPoints = [];
+        const volumeLiquid = [];
+        const volumeIce = [];
 
-        // Funktion zur Generierung der Datenpunkte
-        function generateData() {
-            const data = [];
-            
-            // 1. Daten für flüssiges Wasser von +20°C bis 0°C
-            // Nutzt eine physikalisch korrekte Formel (modifizierte Kell-Formel)
-            const getWaterDensity = (T) => {
-                const T_eff = T - 4;
-                return densityWaterAt4C * (1 - Math.pow(Math.abs(T_eff) / 450, 1.7) * (T_eff > 0 ? 1 : -1) * 0.00000001);
-            };
-            
-            // Schleife für Wasser
-            for (let T = 20; T >= 0; T -= 0.1) {
-                const density = getWaterDensity(T);
-                const relativeVolume = (startVolume / density) * densityWaterAt4C;
-                data.push({ x: T, y: relativeVolume });
-            }
-            
-            // 2. Sprung bei 0°C zum Phasenübergang
-            // Relatives Volumen von Eis bei 0°C im Vergleich zu Wasser bei 4°C
-            const relativeVolumeIceAt0C = (startVolume / densityIceAt0C) * densityWaterAt4C;
-            
-            // Füge einen Sprungpunkt hinzu. Die x-Koordinate bleibt 0, um den vertikalen Sprung zu zeigen
-            data.push({ x: 0, y: relativeVolumeIceAt0C });
-            
-            // 3. Daten für Eis von 0°C bis -20°C
-            // Das Volumen von Eis nimmt bei sinkender Temperatur leicht ab (kontrahiert)
-            for (let T = 0; T >= -20; T -= 0.1) {
-                // Volumenkontraktion von Eis (ca. 0.00011 pro °C)
-                const iceContractionFactor = 1 - (0.00011 * Math.abs(T));
-                const relativeVolume = relativeVolumeIceAt0C * iceContractionFactor;
-                data.push({ x: T, y: relativeVolume });
-            }
-            
-            return data;
+        // Function to calculate density of liquid water based on temperature (Kell, 1975)
+        const getWaterVolume = (t) => {
+            const rho_max = 999.972; // kg/m³ at 4°C
+            const a = 9.49 * Math.pow(10, -6);
+            const b = 5.1 * Math.pow(10, -8);
+            const density = rho_max * (1 - a * Math.pow((t - refTemp), 2) - b * Math.pow((t - refTemp), 3));
+            return rho_max / density; // Relative volume, where 1.0 is at 4°C
+        };
+
+        // Function to calculate volume of ice
+        const getIceVolume = (t) => {
+            const V_at_0 = getWaterVolume(0);
+            const V_ice_at_0 = V_at_0 * 1.0907; // ~9% volume increase
+            const beta_ice = 1.5 * Math.pow(10, -4); // Cubic expansion coefficient of ice (approx)
+            return V_ice_at_0 * (1 - beta_ice * t);
+        };
+
+        // Generate data points
+        // Liquid water: 20°C to 0°C
+        for (let t = 20; t >= 0; t -= 0.5) {
+            tempPoints.push(t);
+            volumeLiquid.push(getWaterVolume(t));
         }
-        
-        const chartData = generateData();
 
-        // Diagramm-Konfiguration
-        const config = {
+        // Ice: 0°C to -20°C
+        for (let t = 0; t >= -20; t -= 0.5) {
+            volumeIce.push(getIceVolume(t));
+        }
+
+        // 2. CHART CONFIGURATION
+        const ctx = document.getElementById('anomalyChart').getContext('2d');
+        const anomalyChart = new Chart(ctx, {
             type: 'line',
             data: {
+                labels: tempPoints.concat(volumeIce.map((_, i) => 0 - i * 0.5)),
                 datasets: [
                     {
-                        label: 'Volumen',
-                        data: chartData,
+                        label: 'Volumen (flüssiges Wasser)',
+                        data: volumeLiquid.map((v, i) => ({ x: tempPoints[i], y: v })),
                         borderColor: 'rgba(0, 123, 255, 1)',
                         backgroundColor: 'rgba(0, 123, 255, 0.2)',
                         borderWidth: 2,
+                        pointRadius: 0,
                         fill: false,
-                        pointRadius: 0
+                        tension: 0.1,
+                        segment: {
+                            borderColor: (ctx) => {
+                                // Highlight the section around the anomaly point
+                                const x = ctx.p1.parsed.x;
+                                if (x >= 0 && x <= 4) {
+                                    return 'rgba(255, 193, 7, 1)';
+                                }
+                                return 'rgba(0, 123, 255, 1)';
+                            }
+                        }
+                    },
+                    {
+                        label: 'Volumen (Eis)',
+                        data: volumeIce.map((v, i) => ({ x: 0 - i * 0.5, y: v })),
+                        borderColor: 'rgba(108, 117, 125, 1)',
+                        backgroundColor: 'rgba(108, 117, 125, 0.2)',
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        fill: false,
+                        tension: 0.1
                     }
                 ]
             },
@@ -169,27 +178,49 @@
                         position: 'bottom',
                         title: {
                             display: true,
-                            text: 'Temperatur (°C)'
-                        },
-                        min: -20,
-                        max: 20
-                    },
-                    y: {
-                        type: 'linear',
-                        title: {
-                            display: true,
-                            text: 'Relatives Volumen (L)',
+                            text: 'Temperatur (°C)',
+                            font: {
+                                size: 14,
+                                weight: 'bold'
+                            }
                         },
                         ticks: {
-                            callback: function(value) {
-                                return value.toFixed(3) + ' L';
-                            }
+                            min: -20,
+                            max: 20
                         }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Relative Volumenänderung (V/V_min)',
+                            font: {
+                                size: 14,
+                                weight: 'bold'
+                            }
+                        },
+                        beginAtZero: false,
+                        min: 0.99,
+                        max: 1.12
                     }
                 },
                 plugins: {
                     legend: {
-                        display: false // Ein Dataset, keine Legende nötig
+                        display: true
+                    },
+                    tooltip: {
+                        callbacks: {
+                            title: (context) => {
+                                return `Temperatur: ${context[0].parsed.x.toFixed(2)}°C`;
+                            },
+                            label: (context) => {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                label += `${context.parsed.y.toFixed(4)} Liter`;
+                                return label;
+                            }
+                        }
                     },
                     zoom: {
                         pan: {
@@ -198,51 +229,65 @@
                             threshold: 10
                         },
                         zoom: {
-                            wheel: { enabled: true },
-                            pinch: { enabled: true },
-                            mode: 'xy'
-                        },
-                        // Zoom-Event-Handler
-                        onZoomComplete: function({ chart }) {
-                            updateZoomInfo(chart);
-                        },
-                        onPanComplete: function({ chart }) {
-                            updateZoomInfo(chart);
+                            wheel: {
+                                enabled: true,
+                            },
+                            pinch: {
+                                enabled: true
+                            },
+                            mode: 'xy',
                         }
                     }
                 }
             }
-        };
+        });
 
-        const anomalyChart = new Chart(chartCanvas, config);
-        
-        // Initialen Y-Bereich nach der Erstellung des Diagramms speichern
-        initialYRange = anomalyChart.scales.y.max - anomalyChart.scales.y.min;
+        // 3. INTERACTIVITY AND DYNAMIC UI
+        const zoomInfo = document.getElementById('zoom-info');
+        const resetButton = document.getElementById('reset-button');
+        const startHeightCm = 6.5;
 
-        // Funktion zur Aktualisierung der Zoom-Informationen
-        function updateZoomInfo(chart) {
-            const yAxis = chart.scales.y;
-            const yRange = yAxis.max - yAxis.min;
-            const zoomFactorY = initialYRange / yRange;
+        // Function to calculate and update zoom info
+        const updateZoomInfo = () => {
+            const yAxis = anomalyChart.options.scales.y;
+            const originalMin = 0.99;
+            const originalMax = 1.12;
 
-            if (zoomFactorY > 1.05) {
-                const physicalHeightCm = 6.5;
-                const hypotheticalHeightM = (physicalHeightCm * zoomFactorY) / 100;
-                zoomInfo.textContent = `Wären die Ränder des Diagramms nicht abgeschnitten, hätte es jetzt eine Höhe von ${hypotheticalHeightM.toFixed(2)} Metern.`;
+            // Get the current visible range
+            const currentMin = yAxis.min;
+            const currentMax = yAxis.max;
+
+            // Calculate zoom factor on y-axis
+            const originalRange = originalMax - originalMin;
+            const currentRange = currentMax - currentMin;
+            const zoomFactor = originalRange / currentRange;
+
+            if (zoomFactor > 1.05) { // Check if a significant zoom occurred
+                const hypotheticalHeightMeters = (startHeightCm * zoomFactor) / 100;
+                zoomInfo.textContent = `Wären die Ränder des Diagramms nicht abgeschnitten, hätte es jetzt eine Höhe von ${hypotheticalHeightMeters.toFixed(2)} Metern.`;
             } else {
                 zoomInfo.textContent = 'Zoom-Level: Normal';
             }
-        }
+        };
 
-        // Event-Handler für den Reset-Button
+        // Event listener for zooming
+        anomalyChart.options.plugins.zoom.zoom.onZoom = (context) => {
+            updateZoomInfo();
+        };
+
+        // Event listener for panning
+        anomalyChart.options.plugins.zoom.pan.onPan = (context) => {
+            updateZoomInfo();
+        };
+
+        // Event listener for reset button
         resetButton.addEventListener('click', () => {
             anomalyChart.resetZoom();
-            updateZoomInfo(anomalyChart);
+            updateZoomInfo();
         });
         
-        // Initialer Aufruf zum Setzen des Textes
-        updateZoomInfo(anomalyChart);
+        // Initial update
+        updateZoomInfo();
     </script>
-
 </body>
 </html>
