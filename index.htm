@@ -3,13 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Absolut Finale Version: Dichteanomalie des Wassers</title>
     
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-    <meta http-equiv="Pragma" content="no-cache" />
-    <meta http-equiv="Expires" content="0" />
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 
-    <title>Finale Version: Dichteanomalie des Wassers</title>
-    
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -29,27 +26,15 @@
             border-radius: 8px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         }
-        h1 {
-            color: #005a9e;
-            text-align: center;
-            margin-bottom: 0.5rem;
-        }
-        p {
-            text-align: center;
-            margin-top: 0;
-            color: #555;
-            line-height: 1.6;
-            margin-bottom: 1.5rem;
-        }
+        h1 { color: #005a9e; text-align: center; }
+        p { text-align: center; color: #555; line-height: 1.6; margin-bottom: 1.5rem; }
         
-        /* Wichtigste Regel: Verhindert den Browser-Zoom auf dem Diagramm */
-        #chart-wrapper {
-            position: relative;
+        /* Das div-Element, das den Graphen enthalten wird */
+        #chartDiv {
             width: 100%;
-            touch-action: none; /* Deaktiviert Browser-Standardgesten für dieses Element */
+            height: 500px; /* Feste Höhe für bessere Darstellung */
         }
 
-        /* Styling für den Reset-Button */
         #resetZoomBtn {
             margin-top: 1rem;
             padding: 10px 20px;
@@ -59,10 +44,6 @@
             background-color: #007bff;
             color: white;
             border-radius: 5px;
-            transition: background-color 0.3s;
-        }
-        #resetZoomBtn:hover {
-            background-color: #0056b3;
         }
     </style>
 </head>
@@ -71,82 +52,111 @@
     <div class="container">
         <h1>Die Dichteanomalie des Wassers</h1>
         <p>
-            <b>Anleitung:</b> Benutzen Sie <b>zwei Finger</b> direkt auf dem Diagramm, um zu zoomen (auseinanderziehen) und zu stauchen (zusammendrücken). Verschieben Sie die Ansicht mit <b>einem Finger</b> nach links oder rechts. Doppelklick funktioniert hier nicht.
+            <b>Anleitung:</b> Benutzen Sie <b>zwei Finger</b> direkt auf dem Diagramm, um zu zoomen (auseinanderziehen). Verschieben Sie die Ansicht mit <b>einem Finger</b>. Ein Doppelklick setzt den Zoom zurück.
         </p>
         
-        <div id="chart-wrapper">
-            <canvas id="waterVolumeChart"></canvas>
-        </div>
+        <div id="chartDiv"></div>
         
-        <button id="resetZoomBtn">Zoom zurücksetzen</button>
+        <button id="resetZoomBtn">Manueller Reset</button>
     </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom"></script>
 
     <script>
         // === DATENGENERIERUNG (unverändert) ===
-        const labels = [];
-        const waterData = [];
-        const iceData = [];
+        const waterX = [];
+        const waterY = [];
+        const iceX = [];
+        const iceY = [];
+
         const waterVolumeCoefficient = 7.7e-6;
         const iceContractionCoefficient = 1.53e-4;
         const volumeAt4C = 1.00000;
         const volumeJumpFactor = 1.0905;
 
-        for (let temp = 10; temp >= -20; temp -= 0.1) {
+        for (let temp = 10; temp >= 0; temp -= 0.1) {
             const currentTemp = parseFloat(temp.toFixed(1));
-            labels.push(currentTemp);
-            if (currentTemp >= 0) {
-                const volume = volumeAt4C * (1 + waterVolumeCoefficient * Math.pow(currentTemp - 4, 2));
-                waterData.push({ x: currentTemp, y: volume });
-                iceData.push({ x: currentTemp, y: NaN });
-            } else {
-                const volumeWaterAt0 = volumeAt4C * (1 + waterVolumeCoefficient * Math.pow(0 - 4, 2));
-                const volumeIceAt0 = volumeWaterAt0 * volumeJumpFactor;
-                const iceVolume = volumeIceAt0 * (1 + iceContractionCoefficient * currentTemp);
-                iceData.push({ x: currentTemp, y: iceVolume });
-                waterData.push({ x: currentTemp, y: NaN });
-            }
+            const volume = volumeAt4C * (1 + waterVolumeCoefficient * Math.pow(currentTemp - 4, 2));
+            waterX.push(currentTemp);
+            waterY.push(volume);
         }
+
         const volumeWaterAt0 = volumeAt4C * (1 + waterVolumeCoefficient * Math.pow(0 - 4, 2));
         const volumeIceAt0 = volumeWaterAt0 * volumeJumpFactor;
-        labels.push(0);
-        iceData.push({x: 0, y: volumeIceAt0});
+        
+        iceX.push(0); // Startpunkt für Eis bei 0°C
+        iceY.push(volumeIceAt0);
 
-        // === CHART KONFIGURATION ===
-        const ctx = document.getElementById('waterVolumeChart').getContext('2d');
-        const waterChart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: labels.slice().reverse(),
-                datasets: [
-                    { label: 'Flüssiges Wasser', data: waterData.slice().reverse(), borderColor: 'rgba(54, 162, 235, 1)', borderWidth: 3, pointRadius: 0, pointHitRadius: 10, tension: 0.1, spanGaps: false },
-                    { label: 'Eis', data: iceData.slice().reverse(), borderColor: 'rgba(173, 216, 230, 1)', borderWidth: 3, pointRadius: 0, pointHitRadius: 10, spanGaps: false }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: true,
-                scales: {
-                    x: { type: 'linear', title: { display: true, text: 'Temperatur (°C)', font: { size: 14 } }, min: -20, max: 10 },
-                    y: { title: { display: true, text: 'Relatives Volumen', font: { size: 14 } }, min: 0.9999, grace: '5%' }
-                },
-                plugins: {
-                    zoom: {
-                        pan: { enabled: true, mode: 'x' },
-                        zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' }
-                    },
-                    tooltip: { mode: 'index', intersect: false },
-                    legend: { position: 'top' }
-                }
+        for (let temp = -0.1; temp >= -20; temp -= 0.1) {
+            const currentTemp = parseFloat(temp.toFixed(1));
+            const iceVolume = volumeIceAt0 * (1 + iceContractionCoefficient * currentTemp);
+            iceX.push(currentTemp);
+            iceY.push(iceVolume);
+        }
+
+        // === PLOTLY INITIALISIERUNG ===
+        
+        // 1. Definiere die Daten-Spuren (entspricht "datasets" in Chart.js)
+        const traceWater = {
+            x: waterX.reverse(), // Plotly zeichnet von links nach rechts
+            y: waterY.reverse(),
+            mode: 'lines',
+            name: 'Flüssiges Wasser',
+            line: {
+                color: 'rgba(54, 162, 235, 1)',
+                width: 3
             }
-        });
+        };
+
+        const traceIce = {
+            x: iceX.reverse(),
+            y: iceY.reverse(),
+            mode: 'lines',
+            name: 'Eis',
+            line: {
+                color: 'rgba(173, 216, 230, 1)',
+                width: 3
+            }
+        };
+
+        const data = [traceWater, traceIce];
+
+        // 2. Definiere das Layout (Titel, Achsen, etc.)
+        const layout = {
+            xaxis: {
+                title: 'Temperatur (°C)',
+                range: [-20, 10] // Startbereich der X-Achse
+            },
+            yaxis: {
+                title: 'Relatives Volumen',
+                range: [0.9999, 1.0003] // Startbereich der Y-Achse, um Anomalie zu zeigen
+            },
+            legend: {
+                y: 1.1,
+                orientation: 'h' // Legende horizontal über dem Graphen
+            },
+            margin: { l: 60, r: 30, b: 50, t: 30 } // Ränder anpassen
+        };
+
+        // 3. Konfiguration für die Interaktion (wichtig!)
+        const config = {
+            responsive: true, // Passt sich der Container-Größe an
+            displaylogo: false, // Entfernt das Plotly-Logo
+            scrollZoom: true // Aktiviert das Zoomen mit Mausrad ODER Zwei-Fingern
+        };
+
+        const chartDiv = document.getElementById('chartDiv');
+        
+        // 4. Zeichne den Graphen
+        Plotly.newPlot(chartDiv, data, layout, config);
 
         // Funktionalität für den Reset-Button
         document.getElementById('resetZoomBtn').addEventListener('click', () => {
-            waterChart.resetZoom();
+            // Setzt das Layout auf die ursprünglichen Zoom-Werte zurück
+            Plotly.relayout(chartDiv, {
+                'xaxis.range': [-20, 10],
+                'yaxis.range': [0.9999, 1.0003]
+            });
         });
+
     </script>
 
 </body>
