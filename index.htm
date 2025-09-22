@@ -99,15 +99,89 @@
             }
             dataPoints.push({x: currentTemp, y: volume});
         }
-        // Trenne Daten für Darstellung der Lücke
-        const waterData = dataPoints.filter(p => p.x >= 0);
-        const iceData = dataPoints.filter(p => p.x <= 0);
-
 
         // === CHART KONFIGURATION ===
         const waterChart = new Chart(canvasElement, {
             type: 'line',
             data: {
                 datasets: [
-                    { label: 'Wasser/
-                        
+                    { label: 'Wasser/Eis', data: dataPoints.slice().reverse(), borderColor: 'rgba(54, 162, 235, 1)', borderWidth: 3, pointRadius: 0, pointHitRadius: 10, tension: 0.1 }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                scales: {
+                    x: { 
+                        type: 'linear', 
+                        title: { display: true, text: 'Temperatur (°C)' },
+                        // NEUER STARTBEREICH für die X-Achse
+                        min: -20, 
+                        max: 20 
+                    },
+                    y: { 
+                        title: { display: true, text: 'Relatives Volumen' },
+                        // KEIN Start-Zoom mehr, zeigt den gesamten Bereich
+                    }
+                },
+                plugins: {
+                    zoom: {
+                        pan: { enabled: true, mode: 'x' },
+                        zoom: { 
+                            wheel: { enabled: true }, 
+                            pinch: { enabled: true }, 
+                            mode: 'xy', // Zoom in beide Richtungen erlauben
+                            // NEUE FUNKTION: Wird nach dem Zoomen ausgeführt
+                            onZoomComplete: ({chart}) => {
+                                updateZoomInfo(chart);
+                            }
+                        }
+                    },
+                    legend: { display: false }
+                }
+            }
+        });
+
+        // === LOGIK FÜR DIE ZOOM-ANZEIGE ===
+        let initialYRange = 0;
+        // Speichere den anfänglichen Y-Achsen-Bereich, sobald das Diagramm gezeichnet ist
+        // Ein kleiner Timeout stellt sicher, dass die Skala vollständig berechnet wurde.
+        setTimeout(() => {
+            const y_scale = waterChart.scales.y;
+            initialYRange = y_scale.max - y_scale.min;
+            updateZoomInfo(waterChart); // Initialen Text setzen
+        }, 100);
+
+        function updateZoomInfo(chart) {
+            const y_scale = chart.scales.y;
+            const currentYRange = y_scale.max - y_scale.min;
+            
+            // Verhindere eine Division durch Null, falls etwas schiefgeht
+            if (currentYRange === 0 || initialYRange === 0) return;
+
+            const zoomFactor = initialYRange / currentYRange;
+
+            // Annahme: Das Diagramm ist auf dem Handy initial 6.5cm hoch.
+            // Diese Basisgröße wird zur Berechnung der hypothetischen Höhe verwendet.
+            const basePhysicalHeightCM = 6.5; 
+            const hypotheticalHeightMeters = (basePhysicalHeightCM * zoomFactor) / 100;
+
+            if (zoomFactor > 1.05) { // Zeige die Info nur an, wenn wirklich gezoomt wurde
+                zoomInfoElement.textContent = `Wären die Ränder des Diagramms nicht abgeschnitten, hätte es jetzt eine Höhe von ${hypotheticalHeightMeters.toFixed(2)} Metern.`;
+            } else {
+                zoomInfoElement.textContent = `Zoom-Level: Normal`;
+            }
+        }
+
+        // Funktionalität für den Reset-Button
+        document.getElementById('resetZoomBtn').addEventListener('click', () => {
+            waterChart.resetZoom();
+            // Textanzeige ebenfalls zurücksetzen
+            updateZoomInfo(waterChart);
+
+        });
+
+    </script>
+
+</body>
+</html>
