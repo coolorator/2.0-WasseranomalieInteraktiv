@@ -28,7 +28,7 @@
         }
         p { text-align: center; line-height: 1.6; }
         
-        /* NEUES Feld für die Zoom-Info */
+        /* Das Feld für die Zoom-Info */
         #zoom-info {
             background-color: #eef7ff;
             color: #005a9e;
@@ -80,32 +80,61 @@
         const canvasElement = document.getElementById('waterVolumeChart');
         const zoomInfoElement = document.getElementById('zoom-info');
 
-        // === DATENGENERIERUNG (angepasst für +20°C) ===
-        const dataPoints = [];
-        // Generiere Daten von +20°C bis -20°C
+        // === DATENGENERIERUNG (Korrigierte Version mit Lücke) ===
+        const waterPoints = [];
+        const icePoints = [];
+        
+        // Physikalische Konstanten
+        const volumeAt4C = 1.00000;
+        const waterVolumeCoefficient = 7.7e-6;
+        const iceContractionCoefficient = 1.53e-4;
+        const volumeJumpFactor = 1.0905;
+
+        // Generiere Datenpunkte von +20°C bis -20°C
         for (let temp = 20; temp >= -20; temp -= 0.1) {
             const currentTemp = parseFloat(temp.toFixed(1));
-            let volume;
 
             if (currentTemp >= 0) { // Flüssiges Wasser
-                const volumeAt4C = 1.00000;
-                const waterVolumeCoefficient = 7.7e-6;
-                volume = volumeAt4C * (1 + waterVolumeCoefficient * Math.pow(currentTemp - 4, 2));
+                const volume = volumeAt4C * (1 + waterVolumeCoefficient * Math.pow(currentTemp - 4, 2));
+                waterPoints.push({x: currentTemp, y: volume});
             } else { // Eis
-                const volumeWaterAt0 = 1.00000 * (1 + 7.7e-6 * Math.pow(0 - 4, 2));
-                const volumeIceAt0 = volumeWaterAt0 * 1.0905;
-                const iceContractionCoefficient = 1.53e-4;
-                volume = volumeIceAt0 * (1 + iceContractionCoefficient * currentTemp);
+                const volumeWaterAt0 = volumeAt4C * (1 + waterVolumeCoefficient * Math.pow(0 - 4, 2));
+                const volumeIceAt0 = volumeWaterAt0 * volumeJumpFactor;
+                const volume = volumeIceAt0 * (1 + iceContractionCoefficient * currentTemp);
+                icePoints.push({x: currentTemp, y: volume});
             }
-            dataPoints.push({x: currentTemp, y: volume});
         }
+        // Füge den Startpunkt für Eis bei 0°C explizit hinzu, um den Sprung zu erzeugen
+        const volumeWaterAt0 = volumeAt4C * (1 + waterVolumeCoefficient * Math.pow(0 - 4, 2));
+        const volumeIceAt0 = volumeWaterAt0 * volumeJumpFactor;
+        icePoints.push({x: 0, y: volumeIceAt0});
+
 
         // === CHART KONFIGURATION ===
         const waterChart = new Chart(canvasElement, {
             type: 'line',
             data: {
                 datasets: [
-                    { label: 'Wasser/Eis', data: dataPoints.slice().reverse(), borderColor: 'rgba(54, 162, 235, 1)', borderWidth: 3, pointRadius: 0, pointHitRadius: 10, tension: 0.1 }
+                    { 
+                        label: 'Flüssiges Wasser', 
+                        data: waterPoints.slice().reverse(), 
+                        borderColor: 'rgba(54, 162, 235, 1)', 
+                        borderWidth: 3, 
+                        pointRadius: 0, 
+                        pointHitRadius: 10, 
+                        tension: 0.1,
+                        spanGaps: false
+                    },
+                    { 
+                        label: 'Eis', 
+                        data: icePoints.slice().reverse(), 
+                        borderColor: 'rgba(135, 206, 250, 1)', 
+                        borderWidth: 3, 
+                        pointRadius: 0, 
+                        pointHitRadius: 10, 
+                        tension: 0.1,
+                        spanGaps: false
+                    }
                 ]
             },
             options: {
@@ -115,13 +144,11 @@
                     x: { 
                         type: 'linear', 
                         title: { display: true, text: 'Temperatur (°C)' },
-                        // NEUER STARTBEREICH für die X-Achse
                         min: -20, 
                         max: 20 
                     },
                     y: { 
                         title: { display: true, text: 'Relatives Volumen' },
-                        // KEIN Start-Zoom mehr, zeigt den gesamten Bereich
                     }
                 },
                 plugins: {
@@ -130,43 +157,39 @@
                         zoom: { 
                             wheel: { enabled: true }, 
                             pinch: { enabled: true }, 
-                            mode: 'xy', // Zoom in beide Richtungen erlauben
-                            // NEUE FUNKTION: Wird nach dem Zoomen ausgeführt
+                            mode: 'xy',
                             onZoomComplete: ({chart}) => {
                                 updateZoomInfo(chart);
                             }
                         }
                     },
-                    legend: { display: false }
+                    legend: {
+                        display: true,
+                        position: 'top'
+                    }
                 }
             }
         });
 
         // === LOGIK FÜR DIE ZOOM-ANZEIGE ===
         let initialYRange = 0;
-        // Speichere den anfänglichen Y-Achsen-Bereich, sobald das Diagramm gezeichnet ist
-        // Ein kleiner Timeout stellt sicher, dass die Skala vollständig berechnet wurde.
         setTimeout(() => {
             const y_scale = waterChart.scales.y;
             initialYRange = y_scale.max - y_scale.min;
-            updateZoomInfo(waterChart); // Initialen Text setzen
-        }, 100);
+            updateZoomInfo(waterChart);
+        }, 200); // Leicht erhöhter Timeout für Stabilität
 
         function updateZoomInfo(chart) {
             const y_scale = chart.scales.y;
             const currentYRange = y_scale.max - y_scale.min;
             
-            // Verhindere eine Division durch Null, falls etwas schiefgeht
             if (currentYRange === 0 || initialYRange === 0) return;
 
             const zoomFactor = initialYRange / currentYRange;
-
-            // Annahme: Das Diagramm ist auf dem Handy initial 6.5cm hoch.
-            // Diese Basisgröße wird zur Berechnung der hypothetischen Höhe verwendet.
             const basePhysicalHeightCM = 6.5; 
             const hypotheticalHeightMeters = (basePhysicalHeightCM * zoomFactor) / 100;
 
-            if (zoomFactor > 1.05) { // Zeige die Info nur an, wenn wirklich gezoomt wurde
+            if (zoomFactor > 1.05) {
                 zoomInfoElement.textContent = `Wären die Ränder des Diagramms nicht abgeschnitten, hätte es jetzt eine Höhe von ${hypotheticalHeightMeters.toFixed(2)} Metern.`;
             } else {
                 zoomInfoElement.textContent = `Zoom-Level: Normal`;
@@ -176,11 +199,8 @@
         // Funktionalität für den Reset-Button
         document.getElementById('resetZoomBtn').addEventListener('click', () => {
             waterChart.resetZoom();
-            // Textanzeige ebenfalls zurücksetzen
             updateZoomInfo(waterChart);
-
         });
-
     </script>
 
 </body>
