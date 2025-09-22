@@ -40,24 +40,8 @@
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
         }
 
-        canvas {
-            touch-action: none; /* Crucial for mobile zoom */
-        }
-
-        #reset-button {
-            margin-top: 20px;
-            padding: 10px 20px;
-            font-size: 1em;
-            cursor: pointer;
-            background-color: #dc3545;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            transition: background-color 0.3s ease;
-        }
-
-        #reset-button:hover {
-            background-color: #c82333;
+        #anomalyChart {
+            height: 450px;
         }
 
         @media (max-width: 600px) {
@@ -85,183 +69,119 @@
     </p>
 
     <div id="chart-container">
-        <canvas id="anomalyChart"></canvas>
+        <div id="anomalyChart"></div>
     </div>
 
-    <button id="reset-button">Zoom zurücksetzen</button>
-
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js" charset="utf-8"></script>
 
     <script>
         // 1. DATA PREPARATION (SCIENTIFICALLY ACCURATE)
-        // Set reference volume at 4°C to 1 liter.
-        const refTemp = 4; // °C
-        const tempPoints = [];
-        const volumeLiquid = [];
-        const volumeIce = [];
-
-        // Function to calculate density of liquid water based on temperature (Kell, 1975)
+        const refTemp = 4;
         const getWaterVolume = (t) => {
-            const rho_max = 999.972; // kg/m³ at 4°C
+            const rho_max = 999.972;
             const a = 9.49 * Math.pow(10, -6);
             const b = 5.1 * Math.pow(10, -8);
             const density = rho_max * (1 - a * Math.pow((t - refTemp), 2) - b * Math.pow((t - refTemp), 3));
-            return rho_max / density; // Relative volume, where 1.0 is at 4°C
+            return rho_max / density;
         };
 
-        // Function to calculate volume of ice
         const getIceVolume = (t) => {
             const V_at_0 = getWaterVolume(0);
-            const V_ice_at_0 = V_at_0 * 1.0907; // ~9% volume increase
-            const beta_ice = 1.5 * Math.pow(10, -4); // Cubic expansion coefficient of ice (approx)
+            const V_ice_at_0 = V_at_0 * 1.0907;
+            const beta_ice = 1.5 * Math.pow(10, -4);
             return V_ice_at_0 * (1 - beta_ice * t);
         };
 
-        // Generate data points
-        // Liquid water: 20°C to 0°C
+        const tempLiquid = [];
+        const volumeLiquid = [];
         for (let t = 20; t >= 0; t -= 0.5) {
-            tempPoints.push(t);
+            tempLiquid.push(t);
             volumeLiquid.push(getWaterVolume(t));
         }
 
-        // Ice: 0°C to -20°C
+        const tempIce = [];
+        const volumeIce = [];
         for (let t = 0; t >= -20; t -= 0.5) {
+            tempIce.push(t);
             volumeIce.push(getIceVolume(t));
         }
 
-        // 2. CHART CONFIGURATION
-        const ctx = document.getElementById('anomalyChart').getContext('2d');
-        const anomalyChart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: tempPoints.concat(volumeIce.map((_, i) => 0 - i * 0.5)),
-                datasets: [
-                    {
-                        label: 'Volumen (flüssiges Wasser)',
-                        data: volumeLiquid.map((v, i) => ({ x: tempPoints[i], y: v })),
-                        borderColor: 'rgba(0, 123, 255, 1)',
-                        backgroundColor: 'rgba(0, 123, 255, 0.2)',
-                        borderWidth: 2,
-                        pointRadius: 0,
-                        fill: false,
-                        tension: 0.1,
-                        segment: {
-                            borderColor: (ctx) => {
-                                // Highlight the section around the anomaly point
-                                const x = ctx.p1.parsed.x;
-                                if (x >= 0 && x <= 4) {
-                                    return 'rgba(255, 193, 7, 1)';
-                                }
-                                return 'rgba(0, 123, 255, 1)';
-                            }
-                        }
-                    },
-                    {
-                        label: 'Volumen (Eis)',
-                        data: volumeIce.map((v, i) => ({ x: 0 - i * 0.5, y: v })),
-                        borderColor: 'rgba(108, 117, 125, 1)',
-                        backgroundColor: 'rgba(108, 117, 125, 0.2)',
-                        borderWidth: 2,
-                        pointRadius: 0,
-                        fill: false,
-                        tension: 0.1
-                    }
-                ]
+        // 2. PLOTLY CHART CONFIGURATION
+        const liquidTrace = {
+            x: tempLiquid,
+            y: volumeLiquid,
+            mode: 'lines',
+            name: 'Volumen (flüssiges Wasser)',
+            line: { color: 'rgba(0, 123, 255, 1)', width: 2 }
+        };
+
+        const iceTrace = {
+            x: tempIce,
+            y: volumeIce,
+            mode: 'lines',
+            name: 'Volumen (Eis)',
+            line: { color: 'rgba(108, 117, 125, 1)', width: 2 }
+        };
+
+        const data = [liquidTrace, iceTrace];
+
+        const layout = {
+            title: 'Volumen von Wasser und Eis vs. Temperatur',
+            xaxis: {
+                title: 'Temperatur (°C)',
+                range: [-20, 20]
             },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    x: {
-                        type: 'linear',
-                        position: 'bottom',
-                        title: {
-                            display: true,
-                            text: 'Temperatur (°C)',
-                            font: {
-                                size: 14,
-                                weight: 'bold'
-                            }
-                        },
-                        min: -20,
-                        max: 20
-                    },
-                    y: {
-                        title: {
-                            display: true,
-                            text: 'Relative Volumenänderung (V/V_min)',
-                            font: {
-                                size: 14,
-                                weight: 'bold'
-                            }
-                        },
-                        beginAtZero: false
-                    }
-                },
-                plugins: {
-                    legend: {
-                        display: true
-                    },
-                    tooltip: {
-                        callbacks: {
-                            title: (context) => {
-                                return `Temperatur: ${context[0].parsed.x.toFixed(2)}°C`;
-                            },
-                            label: (context) => {
-                                let label = context.dataset.label || '';
-                                if (label) {
-                                    label += ': ';
-                                }
-                                label += `${context.parsed.y.toFixed(4)} Liter`;
-                                return label;
-                            }
-                        }
-                    },
-                    zoom: {
-                        pan: {
-                            enabled: true,
-                            mode: 'xy',
-                            threshold: 10
-                        },
-                        zoom: {
-                            wheel: {
-                                enabled: true,
-                            },
-                            pinch: {
-                                enabled: true
-                            },
-                            mode: 'xy',
-                            onZoomComplete: (context) => {
-                                updateZoomInfo(context.chart);
-                            }
-                        }
-                    }
+            yaxis: {
+                title: 'Relative Volumenänderung (V/V_min)',
+                rangemode: 'tozero' // Let plotly handle the range
+            },
+            autosize: true,
+            margin: { t: 50, b: 50, l: 50, r: 50 },
+            hovermode: 'closest',
+            showlegend: true,
+            dragmode: 'pan',
+        };
+
+        const config = {
+            responsive: true,
+            displayModeBar: true,
+            modeBarButtonsToRemove: ['zoom2d', 'select2d', 'lasso2d', 'autoscale', 'toggleSpikelines', 'hovercompare', 'hoverclosest'],
+            modeBarButtonsToAdd: [{
+                name: 'Reset Zoom',
+                icon: Plotly.Icons.home,
+                click: function() {
+                    Plotly.relayout('anomalyChart', {
+                        'xaxis.range': [-20, 20],
+                        'yaxis.autorange': true
+                    });
                 }
-            }
-        });
+            }]
+        };
+
+        Plotly.newPlot('anomalyChart', data, layout, config);
 
         // 3. INTERACTIVITY AND DYNAMIC UI
         const zoomInfo = document.getElementById('zoom-info');
-        const resetButton = document.getElementById('reset-button');
         const startHeightCm = 6.5;
 
-        // Function to calculate and update zoom info
-        const updateZoomInfo = (chart) => {
-            const yAxis = chart.options.scales.y;
-            const originalMin = chart.scales.y.options.min;
-            const originalMax = chart.scales.y.options.max;
+        const updateZoomInfo = () => {
+            const currentLayout = document.getElementById('anomalyChart').layout;
+            const yAxis = currentLayout.yaxis;
+            
+            // Get original range. We use a defined range to be consistent.
+            const originalMinY = 0.99;
+            const originalMaxY = 1.12;
 
-            // Get the current visible range
-            const currentMin = yAxis.min;
-            const currentMax = yAxis.max;
+            // Get current visible range
+            const currentMinY = yAxis.range[0];
+            const currentMaxY = yAxis.range[1];
 
-            // Calculate zoom factor on y-axis
-            const originalRange = originalMax - originalMin;
-            const currentRange = currentMax - currentMin;
-            const zoomFactor = originalRange / currentRange;
+            // Calculate zoom factor
+            const originalRangeY = originalMaxY - originalMinY;
+            const currentRangeY = currentMaxY - currentMinY;
+            const zoomFactor = originalRangeY / currentRangeY;
 
-            if (zoomFactor > 1.05) { // Check if a significant zoom occurred
+            if (zoomFactor > 1.05) {
                 const hypotheticalHeightMeters = (startHeightCm * zoomFactor) / 100;
                 zoomInfo.textContent = `Wären die Ränder des Diagramms nicht abgeschnitten, hätte es jetzt eine Höhe von ${hypotheticalHeightMeters.toFixed(2)} Metern.`;
             } else {
@@ -269,14 +189,10 @@
             }
         };
 
-        // Event listener for reset button
-        resetButton.addEventListener('click', () => {
-            anomalyChart.resetZoom();
-            updateZoomInfo(anomalyChart);
-        });
-        
+        document.getElementById('anomalyChart').on('plotly_relayout', updateZoomInfo);
+
         // Initial update
-        updateZoomInfo(anomalyChart);
+        updateZoomInfo();
     </script>
 </body>
 </html>
