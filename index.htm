@@ -2,197 +2,206 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Anomalie App 3.0</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <title>Interaktive Dichteanomalie</title>
+    
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: #f0f2f5;
-            color: #333;
-            padding: 20px;
-            text-align: center;
-            max-width: 800px;
-            margin: auto;
-            line-height: 1.6;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            padding: 1rem 0;
+            background-color: #f4f7f9;
         }
-
-        #zoom-info {
-            font-weight: bold;
-            color: #007bff;
-            padding: 10px;
+        .container {
+            width: 95%;
+            max-width: 1000px;
+            padding: 1.5rem;
+            background-color: #ffffff;
             border-radius: 8px;
-            margin-bottom: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        p { text-align: center; line-height: 1.6; }
+        
+        /* Das Feld für die Zoom-Info */
+        #zoom-info {
+            background-color: #eef7ff;
+            color: #005a9e;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+            font-weight: bold;
+            margin-bottom: 1rem;
+            min-height: 1.5em; /* Verhindert Springen des Layouts */
         }
 
-        h1 {
-            color: #17183B;
-            font-size: 1.5em;
+        #chart-wrapper {
+            position: relative;
+            width: 100%;
+            touch-action: none;
         }
-
-        p {
-            margin-bottom: 20px;
-        }
-
-        #chart-container {
-            background: #fff;
-            border-radius: 12px;
-            padding: 20px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-        }
-
-        #anomalyChart {
-            height: 450px;
-        }
-
-        @media (max-width: 600px) {
-            body {
-                padding: 10px;
-            }
-
-            h1 {
-                font-size: 1.2em;
-            }
-
-            #chart-container {
-                padding: 10px;
-            }
+        #resetZoomBtn {
+            margin-top: 1rem;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            background-color: #007bff;
+            color: white;
+            border-radius: 5px;
         }
     </style>
 </head>
 <body>
 
-    <div id="zoom-info">Zoom-Level: Normal</div>
+    <div class="container">
+        <div id="zoom-info"></div>
 
-    <h1>Wasser: Ein Stoff mit Superkräften</h1>
-    <p>
-        Eine davon ist die **Dichteanomalie**: Es dehnt sich beim Gefrieren stark aus und hat sein kleinstes Volumen bei +4°C. Erforsche dieses einzigartige Verhalten selbst.
-    </p>
-
-    <div id="chart-container">
-        <div id="anomalyChart"></div>
+        <p>
+            <b>Wasser ist ein Stoff mit Superkräften.</b> Eine davon ist die Dichteanomalie: Es dehnt sich beim Gefrieren stark aus und hat sein kleinstes Volumen bei +4°C. Erforsche dieses einzigartige Verhalten selbst.
+        </p>
+        
+        <div id="chart-wrapper">
+            <canvas id="waterVolumeChart"></canvas>
+        </div>
+        
+        <button id="resetZoomBtn">Zoom zurücksetzen</button>
     </div>
 
-    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js" charset="utf-8"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom"></script>
 
     <script>
-        // 1. DATA PREPARATION (SCIENTIFICALLY ACCURATE)
-        const refTemp = 4;
-        const getWaterVolume = (t) => {
-            const rho_max = 999.972;
-            const a = 9.49 * Math.pow(10, -6);
-            const b = 5.1 * Math.pow(10, -8);
-            const density = rho_max * (1 - a * Math.pow((t - refTemp), 2) - b * Math.pow((t - refTemp), 3));
-            return rho_max / density;
-        };
+        const canvasElement = document.getElementById('waterVolumeChart');
+        const zoomInfoElement = document.getElementById('zoom-info');
 
-        const getIceVolume = (t) => {
-            const V_at_0 = getWaterVolume(0);
-            const V_ice_at_0 = V_at_0 * 1.0907;
-            const beta_ice = 1.5 * Math.pow(10, -4);
-            return V_ice_at_0 * (1 - beta_ice * t);
-        };
+        // === DATENGENERIERUNG (Korrigierte Version mit Lücke) ===
+        const waterPoints = [];
+        const icePoints = [];
+        
+        // Physikalische Konstanten
+        const volumeAt4C = 1.00000;
+        const waterVolumeCoefficient = 7.7e-6;
+        const iceContractionCoefficient = 1.53e-4;
+        const volumeJumpFactor = 1.0905;
 
-        const tempLiquid = [];
-        const volumeLiquid = [];
-        for (let t = 20; t >= 0; t -= 0.5) {
-            tempLiquid.push(t);
-            volumeLiquid.push(getWaterVolume(t));
+        // Generiere Datenpunkte von +20°C bis -20°C
+        for (let temp = 20; temp >= -20; temp -= 0.1) {
+            const currentTemp = parseFloat(temp.toFixed(1));
+
+            if (currentTemp >= 0) { // Flüssiges Wasser
+                const volume = volumeAt4C * (1 + waterVolumeCoefficient * Math.pow(currentTemp - 4, 2));
+                waterPoints.push({x: currentTemp, y: volume});
+            } else { // Eis
+                const volumeWaterAt0 = volumeAt4C * (1 + waterVolumeCoefficient * Math.pow(0 - 4, 2));
+                const volumeIceAt0 = volumeWaterAt0 * volumeJumpFactor;
+                const volume = volumeIceAt0 * (1 + iceContractionCoefficient * currentTemp);
+                icePoints.push({x: currentTemp, y: volume});
+            }
         }
+        // Füge den Startpunkt für Eis bei 0°C explizit hinzu, um den Sprung zu erzeugen
+        const volumeWaterAt0 = volumeAt4C * (1 + waterVolumeCoefficient * Math.pow(0 - 4, 2));
+        const volumeIceAt0 = volumeWaterAt0 * volumeJumpFactor;
+        icePoints.push({x: 0, y: volumeIceAt0});
 
-        const tempIce = [];
-        const volumeIce = [];
-        for (let t = 0; t >= -20; t -= 0.5) {
-            tempIce.push(t);
-            volumeIce.push(getIceVolume(t));
-        }
 
-        // 2. PLOTLY CHART CONFIGURATION
-        const liquidTrace = {
-            x: tempLiquid,
-            y: volumeLiquid,
-            mode: 'lines',
-            name: 'Volumen (flüssiges Wasser)',
-            line: { color: 'rgba(0, 123, 255, 1)', width: 2 }
-        };
-
-        const iceTrace = {
-            x: tempIce,
-            y: volumeIce,
-            mode: 'lines',
-            name: 'Volumen (Eis)',
-            line: { color: 'rgba(108, 117, 125, 1)', width: 2 }
-        };
-
-        const data = [liquidTrace, iceTrace];
-
-        const layout = {
-            title: 'Volumen von Wasser und Eis vs. Temperatur',
-            xaxis: {
-                title: 'Temperatur (°C)',
-                range: [-20, 20]
+        // === CHART KONFIGURATION ===
+        const waterChart = new Chart(canvasElement, {
+            type: 'line',
+            data: {
+                datasets: [
+                    { 
+                        label: 'Flüssiges Wasser', 
+                        data: waterPoints.slice().reverse(), 
+                        borderColor: 'rgba(54, 162, 235, 1)', 
+                        borderWidth: 3, 
+                        pointRadius: 0, 
+                        pointHitRadius: 10, 
+                        tension: 0.1,
+                        spanGaps: false
+                    },
+                    { 
+                        label: 'Eis', 
+                        data: icePoints.slice().reverse(), 
+                        borderColor: 'rgba(135, 206, 250, 1)', 
+                        borderWidth: 3, 
+                        pointRadius: 0, 
+                        pointHitRadius: 10, 
+                        tension: 0.1,
+                        spanGaps: false
+                    }
+                ]
             },
-            yaxis: {
-                title: 'Relative Volumenänderung (V/V_min)',
-                rangemode: 'tozero' // Let plotly handle the range
-            },
-            autosize: true,
-            margin: { t: 50, b: 50, l: 50, r: 50 },
-            hovermode: 'closest',
-            showlegend: true,
-            dragmode: 'pan',
-        };
-
-        const config = {
-            responsive: true,
-            displayModeBar: true,
-            modeBarButtonsToRemove: ['zoom2d', 'select2d', 'lasso2d', 'autoscale', 'toggleSpikelines', 'hovercompare', 'hoverclosest'],
-            modeBarButtonsToAdd: [{
-                name: 'Reset Zoom',
-                icon: Plotly.Icons.home,
-                click: function() {
-                    Plotly.relayout('anomalyChart', {
-                        'xaxis.range': [-20, 20],
-                        'yaxis.autorange': true
-                    });
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                scales: {
+                    x: { 
+                        type: 'linear', 
+                        title: { display: true, text: 'Temperatur (°C)' },
+                        min: -20, 
+                        max: 20 
+                    },
+                    y: { 
+                        title: { display: true, text: 'Relatives Volumen' },
+                    }
+                },
+                plugins: {
+                    zoom: {
+                        pan: { enabled: true, mode: 'x' },
+                        zoom: { 
+                            wheel: { enabled: true }, 
+                            pinch: { enabled: true }, 
+                            mode: 'xy',
+                            onZoomComplete: ({chart}) => {
+                                updateZoomInfo(chart);
+                            }
+                        }
+                    },
+                    legend: {
+                        display: true,
+                        position: 'top'
+                    }
                 }
-            }]
-        };
+            }
+        });
 
-        Plotly.newPlot('anomalyChart', data, layout, config);
+        // === LOGIK FÜR DIE ZOOM-ANZEIGE ===
+        let initialYRange = 0;
+        setTimeout(() => {
+            const y_scale = waterChart.scales.y;
+            initialYRange = y_scale.max - y_scale.min;
+            updateZoomInfo(waterChart);
+        }, 200); // Leicht erhöhter Timeout für Stabilität
 
-        // 3. INTERACTIVITY AND DYNAMIC UI
-        const zoomInfo = document.getElementById('zoom-info');
-        const startHeightCm = 6.5;
-
-        const updateZoomInfo = () => {
-            const currentLayout = document.getElementById('anomalyChart').layout;
-            const yAxis = currentLayout.yaxis;
+        function updateZoomInfo(chart) {
+            const y_scale = chart.scales.y;
+            const currentYRange = y_scale.max - y_scale.min;
             
-            // Get original range. We use a defined range to be consistent.
-            const originalMinY = 0.99;
-            const originalMaxY = 1.12;
+            if (currentYRange === 0 || initialYRange === 0) return;
 
-            // Get current visible range
-            const currentMinY = yAxis.range[0];
-            const currentMaxY = yAxis.range[1];
-
-            // Calculate zoom factor
-            const originalRangeY = originalMaxY - originalMinY;
-            const currentRangeY = currentMaxY - currentMinY;
-            const zoomFactor = originalRangeY / currentRangeY;
+            const zoomFactor = initialYRange / currentYRange;
+            const basePhysicalHeightCM = 6.5; 
+            const hypotheticalHeightMeters = (basePhysicalHeightCM * zoomFactor) / 100;
 
             if (zoomFactor > 1.05) {
-                const hypotheticalHeightMeters = (startHeightCm * zoomFactor) / 100;
-                zoomInfo.textContent = `Wären die Ränder des Diagramms nicht abgeschnitten, hätte es jetzt eine Höhe von ${hypotheticalHeightMeters.toFixed(2)} Metern.`;
+                zoomInfoElement.textContent = `Wären die Ränder des Diagramms nicht abgeschnitten, hätte es jetzt eine Höhe von ${hypotheticalHeightMeters.toFixed(2)} Metern.`;
             } else {
-                zoomInfo.textContent = 'Zoom-Level: Normal';
+                zoomInfoElement.textContent = `Zoom-Level: Normal`;
             }
-        };
+        }
 
-        document.getElementById('anomalyChart').on('plotly_relayout', updateZoomInfo);
-
-        // Initial update
-        updateZoomInfo();
+        // Funktionalität für den Reset-Button
+        document.getElementById('resetZoomBtn').addEventListener('click', () => {
+            waterChart.resetZoom();
+            updateZoomInfo(waterChart);
+        });
     </script>
+
 </body>
 </html>
